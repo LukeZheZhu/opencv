@@ -128,7 +128,7 @@
 
 #define noconvert
 
-void pyrDown(__global const uchar * src, int src_step, int src_offset, int src_rows, int src_cols,
+inline void pyrDown(__global const uchar * src, int src_step, int src_offset, int src_rows, int src_cols,
              __global uchar * dst, int dst_step, int dst_offset, int dst_rows, int dst_cols)
 {
     const int x = get_global_id(0)*kercn;

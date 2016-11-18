@@ -867,42 +867,40 @@ namespace
             status.setTo(Scalar::all(1));
 
             // build the image pyramids.
-            std::vector<UMat> prevPyr; prevPyr.resize(maxLevel + 1);
-            std::vector<UMat> nextPyr; nextPyr.resize(maxLevel + 1);
+            std::vector<std::vector<UMat> > image(maxLevel + 1, std::vector<UMat>(2));
 
             // allocate buffers with aligned pitch to be able to use cl_khr_image2d_from_buffer extention
             // This is the required pitch alignment in pixels
             int pitchAlign = (int)ocl::Device::getDefault().imagePitchAlignment();
             if (pitchAlign>0)
             {
-                prevPyr[0] = UMat(prevImg.rows,(prevImg.cols+pitchAlign-1)&(-pitchAlign),CV_32FC1).colRange(0,prevImg.cols);
-                nextPyr[0] = UMat(nextImg.rows,(nextImg.cols+pitchAlign-1)&(-pitchAlign),CV_32FC1).colRange(0,nextImg.cols);
+                image[0][0] = UMat(prevImg.rows,(prevImg.cols+pitchAlign-1)&(-pitchAlign),CV_32FC1).colRange(0,prevImg.cols);
+                image[0][1] = UMat(nextImg.rows,(nextImg.cols+pitchAlign-1)&(-pitchAlign),CV_32FC1).colRange(0,nextImg.cols);
                 for (int level = 1; level <= maxLevel; ++level)
                 {
                     int cols,rows;
                     // allocate buffers with aligned pitch to be able to use image on buffer extention
-                    cols = (prevPyr[level - 1].cols+1)/2;
-                    rows = (prevPyr[level - 1].rows+1)/2;
-                    prevPyr[level] = UMat(rows,(cols+pitchAlign-1)&(-pitchAlign),prevPyr[level-1].type()).colRange(0,cols);
-                    cols = (nextPyr[level - 1].cols+1)/2;
-                    rows = (nextPyr[level - 1].rows+1)/2;
-                    nextPyr[level] = UMat(rows,(cols+pitchAlign-1)&(-pitchAlign),nextPyr[level-1].type()).colRange(0,cols);
+                    cols = (image[level - 1][0].cols+1)/2;
+                    rows = (image[level - 1][0].rows+1)/2;
+                    image[level][0] = UMat(rows,(cols+pitchAlign-1)&(-pitchAlign),image[level-1][0].type()).colRange(0,cols);
+                    cols = (image[level - 1][1].cols+1)/2;
+                    rows = (image[level - 1][1].rows+1)/2;
+                    image[level][1] = UMat(rows,(cols+pitchAlign-1)&(-pitchAlign),image[level-1][1].type()).colRange(0,cols);
                 }
             }
 
-            prevImg.convertTo(prevPyr[0], CV_32F);
-            nextImg.convertTo(nextPyr[0], CV_32F);
+            prevImg.convertTo(image[0][0], CV_32F);
+            nextImg.convertTo(image[0][1], CV_32F);
 
             for (int level = 1; level <= maxLevel; ++level)
             {
-                pyrDown(prevPyr[level - 1], prevPyr[level]);
-                pyrDown(nextPyr[level - 1], nextPyr[level]);
+                pyrlk_pyrDown(image[level - 1], image[level]);
             }
 
             // dI/dx ~ Ix, dI/dy ~ Iy
             for (int level = maxLevel; level >= 0; level--)
             {
-                if (!lkSparse_run(prevPyr[level], nextPyr[level], prevPts,
+                if (!lkSparse_run(image[level][0], image[level][1], prevPts,
                                   nextPts, status, err,
                                   prevPts.cols, level))
                     return false;

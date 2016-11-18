@@ -1128,6 +1128,58 @@ static bool ocl_pyrDown( InputArray _src, OutputArray _dst, const Size& _dsz, in
     return k.run(2, globalThreads, localThreads, false);
 }
 
+//personal add, testing
+static bool ocl_pyrlk_pyrDown( InputArray _src, OutputArray _dst, const Size& _dsz, int borderType)
+{
+    std::vector<UMat>& input = *(std::vector<UMat>*) _src.getObj();
+    std::vector<UMat>& output = *(std::vector<UMat>*) _dst.getObj();
+
+    int type = input[0].type(), depth = CV_MAT_DEPTH(type), cn = CV_MAT_CN(type);
+
+    bool doubleSupport = ocl::Device::getDefault().doubleFPConfig() > 0;
+    if (cn > 4 || (depth == CV_64F && !doubleSupport))
+        return false;
+
+    Size ssize = input[0].size();
+    Size dsize = output[0].size();
+    if (dsize.height < 2 || dsize.width < 2)
+        return false;
+
+    CV_Assert( ssize.width > 0 && ssize.height > 0 &&
+            std::abs(dsize.width*2 - ssize.width) <= 2 &&
+            std::abs(dsize.height*2 - ssize.height) <= 2 );
+
+    int float_depth = depth == CV_64F ? CV_64F : CV_32F;
+    const int local_size = 256;
+    int kercn = 1;
+    if (depth == CV_8U && float_depth == CV_32F && cn == 1 && ocl::Device::getDefault().isIntel())
+        kercn = 4;
+    const char * const borderMap[] = { "BORDER_CONSTANT", "BORDER_REPLICATE", "BORDER_REFLECT", "BORDER_WRAP",
+                                       "BORDER_REFLECT_101" };
+    char cvt[2][50];
+    String buildOptions = format(
+            "-D T=%s -D FT=%s -D convertToT=%s -D convertToFT=%s%s "
+            "-D T1=%s -D cn=%d -D kercn=%d -D fdepth=%d -D %s -D LOCAL_SIZE=%d",
+            ocl::typeToStr(type), ocl::typeToStr(CV_MAKETYPE(float_depth, cn)),
+            ocl::convertTypeStr(float_depth, depth, cn, cvt[0]),
+            ocl::convertTypeStr(depth, float_depth, cn, cvt[1]),
+            doubleSupport ? " -D DOUBLE_SUPPORT" : "", ocl::typeToStr(depth),
+            cn, kercn, float_depth, borderMap[borderType], local_size
+    );
+    ocl::Kernel k("lkpyrDown", ocl::imgproc::lk_pyr_down_oclsrc, buildOptions);
+    if (k.empty())
+        return false;
+
+    k.args(ocl::KernelArg::ReadOnly(input[0]), ocl::KernelArg::ReadOnly(input[1]),
+           ocl::KernelArg::WriteOnly(output[0]), ocl::KernelArg::WriteOnly(output[1]));
+
+    size_t localThreads[2]  = { (size_t)local_size/kercn, 1 };
+    size_t globalThreads[2] = { ((size_t)input[0].cols + (kercn-1))/kercn, ((size_t)output[0].rows + 1) / 2 };
+    return k.run(2, globalThreads, localThreads, false);
+}
+
+
+
 static bool ocl_pyrUp( InputArray _src, OutputArray _dst, const Size& _dsz, int borderType)
 {
     int type = _src.type(), depth = CV_MAT_DEPTH(type), channels = CV_MAT_CN(type);
@@ -1289,6 +1341,54 @@ void cv::pyrDown( InputArray _src, OutputArray _dst, const Size& _dsz, int borde
 
     func( src, dst, borderType );
 }
+
+//personal add, testing
+void cv::pyrlk_pyrDown( InputArray _src, OutputArray _dst, const Size& _dsz, int borderType )
+{
+    CV_INSTRUMENT_REGION()
+
+    CV_Assert(borderType != BORDER_CONSTANT);
+
+    std::vector<UMat>& input = *(std::vector<UMat>*) _src.getObj();
+    CV_OCL_RUN(input[0].dims <= 2 && input[1].dims <= 2,
+               ocl_pyrlk_pyrDown(_src, _dst, _dsz, borderType))
+
+    Mat src = _src.getMat();
+    Size dsz = _dsz.area() == 0 ? Size((src.cols + 1)/2, (src.rows + 1)/2) : _dsz;
+    _dst.create( dsz, src.type() );
+    Mat dst = _dst.getMat();
+    int depth = src.depth();
+
+#ifdef HAVE_TEGRA_OPTIMIZATION
+    if(borderType == BORDER_DEFAULT && tegra::useTegra() && tegra::pyrDown(src, dst))
+        return;
+#endif
+
+#ifdef HAVE_IPP
+    bool isolated = (borderType & BORDER_ISOLATED) != 0;
+    int borderTypeNI = borderType & ~BORDER_ISOLATED;
+#endif
+    CV_IPP_RUN(borderTypeNI == BORDER_DEFAULT && (!_src.isSubmatrix() || isolated) && dsz == Size((_src.cols() + 1)/2, (_src.rows() + 1)/2),
+        ipp_pyrdown( _src,  _dst,  _dsz,  borderType));
+
+
+    PyrFunc func = 0;
+    if( depth == CV_8U )
+        func = pyrDown_<FixPtCast<uchar, 8>, PyrDownVec_32s8u>;
+    else if( depth == CV_16S )
+        func = pyrDown_<FixPtCast<short, 8>, PyrDownVec_32s16s >;
+    else if( depth == CV_16U )
+        func = pyrDown_<FixPtCast<ushort, 8>, PyrDownVec_32s16u >;
+    else if( depth == CV_32F )
+        func = pyrDown_<FltCast<float, 8>, PyrDownVec_32f>;
+    else if( depth == CV_64F )
+        func = pyrDown_<FltCast<double, 8>, PyrDownNoVec<double, double> >;
+    else
+        CV_Error( CV_StsUnsupportedFormat, "" );
+
+    func( src, dst, borderType );
+}
+
 
 
 #if defined(HAVE_IPP)

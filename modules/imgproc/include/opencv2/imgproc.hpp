@@ -2789,6 +2789,9 @@ Then, it downsamples the image by rejecting even rows and columns.
 CV_EXPORTS_W void pyrDown( InputArray src, OutputArray dst,
                            const Size& dstsize = Size(), int borderType = BORDER_DEFAULT );
 
+CV_EXPORTS_W void pyrlk_pyrDown( InputArray src, OutputArray dst,
+                           const Size& dstsize = Size(), int borderType = BORDER_DEFAULT );
+
 /** @brief Upsamples an image and then blurs it.
 
 By default, size of the output image is computed as `Size(src.cols\*2, (src.rows\*2)`, but in any

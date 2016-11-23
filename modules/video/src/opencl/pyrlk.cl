@@ -300,6 +300,7 @@ __kernel void lkSparse(image2d_t I, image2d_t J,
                        __global const float2* prevPts, __global float2* nextPts, __global uchar* status, __global float* err,
                        const int level, const int rows, const int cols, int PATCH_X, int PATCH_Y, int c_winSize_x, int c_winSize_y, int c_iters, char calcErr)
 {
+    printf("cacaa");
     __local float smem1[BUFFER];
     __local float smem2[BUFFER];
     __local float smem3[BUFFER];
@@ -345,7 +346,14 @@ __kernel void lkSparse(image2d_t I, image2d_t J,
     // local memory to read image with border to calc sobels
     local float IPatchLocal[LM_W*LM_H];
     ReadPatchIToLocalMem(I,prevPt,IPatchLocal);
-
+#if 0
+    if(xlid == 0 && ylid == 0) {
+        for(int i = 1; i <= 24; ++i) {
+            printf("%f, ", IPatchLocal[0][i]);
+        }
+        printf(" \n");
+    }
+#endif
     {
         SetPatch(IPatchLocal, 0, 0,
                  &I_patch[0][0], &dIdx_patch[0][0], &dIdy_patch[0][0],

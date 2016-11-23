@@ -45,7 +45,7 @@
 #include "lkpyramid.hpp"
 #include "opencl_kernels_video.hpp"
 #include "opencv2/core/hal/intrin.hpp"
-
+#include <iostream>
 #define  CV_DESCALE(x,n)     (((x) + (1 << ((n)-1))) >> (n))
 
 namespace
@@ -956,8 +956,8 @@ namespace
         bool lkSparse_run(UMat &I, UMat &J, const UMat &prevPts, UMat &nextPts, UMat &status, UMat& err,
             int ptcount, int level)
         {
-            size_t localThreads[3]  = { 8, 8};
-            size_t globalThreads[3] = { 8 * (size_t)ptcount, 8};
+            size_t localThreads[3]  = { 8, 4};
+            size_t globalThreads[3] = { 8 * (size_t)ptcount, 4};
             char calcErr = (0 == level) ? 1 : 0;
 
             cv::String build_options;
@@ -973,7 +973,7 @@ namespace
             CV_Assert(I.depth() == CV_32F && J.depth() == CV_32F);
             ocl::Image2D imageI(I, false, ocl::Image2D::canCreateAlias(I));
             ocl::Image2D imageJ(J, false, ocl::Image2D::canCreateAlias(J));
-
+            std::cout << "in here" << std::endl;
             int idxArg = 0;
             idxArg = kernel.set(idxArg, imageI); //image2d_t I
             idxArg = kernel.set(idxArg, imageJ); //image2d_t J
